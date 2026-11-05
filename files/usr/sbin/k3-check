@@ -1,0 +1,22 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Read-only diagnostics; no passwords, node URLs, client lists or configuration dumps.
+printf '\n== Board ==\n'
+ubus call system board
+printf '\n== Build and wireless firmware ==\n'
+cat /etc/k3-wireless-variant
+sha256sum /lib/firmware/brcm/brcmfmac4366c-pcie.bin
+printf '\n== Wireless ==\n'
+iw dev
+printf '\n== Wireless errors ==\n'
+dmesg | grep -Ei 'brcmfmac.*(error|failed|timeout|firmware|version)' | tail -20
+printf '\n== Memory and flash ==\n'
+free -m
+df -h /overlay /tmp
+printf '\n== DNS topology ==\n'
+k3-adguard status
+printf '\n== Services ==\n'
+/etc/init.d/dnsmasq status
+/etc/init.d/passwall2 status
+printf '\n== Ordinary DNS ==\n'
+dig +time=3 +tries=1 @127.0.0.1 openwrt.org A +short

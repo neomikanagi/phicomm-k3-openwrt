@@ -1,0 +1,10 @@
+work/
+dist/
+build.log
+.venv/
+__pycache__/
+*.pyc
+.env
+*.sqlite
+*.trx
+*.bin

@@ -1,0 +1,20 @@
+{
+  "openwrt": {
+    "url": "https://github.com/openwrt/openwrt.git",
+    "version": "25.12.6",
+    "commit": "64900e756efa667774214f9c6b17c113222e01f7"
+  },
+  "passwall2": {
+    "url": "https://github.com/Openwrt-Passwall/openwrt-passwall2.git",
+    "commit": "176e27cb8d9852ce9b30d2e180810b544d8fc9dc"
+  },
+  "passwall_packages": {
+    "url": "https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git",
+    "commit": "da712cf06cf4e6fd39e147fb36e6ec936003fcc9"
+  },
+  "ac88": {
+    "url": "https://raw.githubusercontent.com/xiangfeidexiaohuo/Phicomm-K3_Wireless-Firmware/bc9a70326996cc80bee5e09d5e48108c92095acf/brcmfmac4366c-pcie.bin_ac88.48260",
+    "sha256": "38e313a62cbd9bf70d717d1b14cd82165e3e684eefd389ecd16641f719d64d2b",
+    "description": "BCM4366C0 device firmware extracted from ASUS RT-AC88U 3.0.0.4.386.48260; NOT a Merlin kernel driver"
+  }
+}

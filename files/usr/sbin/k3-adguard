@@ -1,0 +1,101 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+set -eu
+CONFIG=/etc/adguardhome/adguardhome.yaml
+PW=/etc/init.d/passwall2
+AGH=/etc/init.d/adguardhome
+DNS=/etc/init.d/dnsmasq
+
+restart_proxy() {
+    if [ "$(uci -q get passwall2.@global[0].enabled || true)" = 1 ]; then
+        "$PW" restart
+    fi
+}
+case "${1:-status}" in
+    status)
+        printf 'dnsmasq port: %s\n' "$(uci -q get dhcp.@dnsmasq[0].port || echo 53)"
+        printf 'PassWall2 DNS redirect: %s\n' "$(uci -q get passwall2.@global[0].dns_redirect || echo 1)"
+        printf 'PassWall2 ACL: %s\n' "$(uci -q get passwall2.@global[0].acl_enable || echo 0)"
+        "$AGH" status || true
+        ;;
+    enable)
+        [ -s "$CONFIG" ] || { echo 'Run AdGuard Home wizard on port 3000 first (DNS port 5353).' >&2; exit 1; }
+        # Per-device ACLs create another DNS listener and can bypass AGH. Reject, do not erase ACLs.
+        [ "$(uci -q get passwall2.@global[0].acl_enable || echo 0)" != 1 ] || {
+            echo 'Disable PassWall2 per-device ACL before activating this DNS topology.' >&2; exit 1;
+        }
+        port=$(uci -q get dhcp.@dnsmasq[0].port || echo 53)
+        case "$port" in 53|5053) ;; *) echo 'Custom dnsmasq port: refusing to overwrite it.' >&2; exit 1 ;; esac
+        # Protect against concurrent activation and take a transaction snapshot on tmpfs.
+        lock=/tmp/k3-adguard.lock
+        mkdir "$lock" 2>/dev/null || { echo 'Another activation is running (or remove stale /tmp/k3-adguard.lock).' >&2; exit 1; }
+        umask 077
+        tmp=$(mktemp -d /tmp/k3-adguard.XXXXXX)
+        cp "$CONFIG" "$tmp/config"
+        uci export dhcp > "$tmp/dhcp"
+        uci export passwall2 > "$tmp/passwall2"
+        agh_enabled=0; "$AGH" enabled && agh_enabled=1
+        agh_running=0; "$AGH" running && agh_running=1
+        done_ok=0
+        cleanup() {
+            rc=$?
+            set +e
+            trap - EXIT HUP INT TERM
+            if [ "$done_ok" != 1 ]; then
+                "$AGH" stop || true
+                "$PW" stop || true
+                cp "$tmp/config" "$CONFIG"
+                uci import dhcp < "$tmp/dhcp"
+                uci import passwall2 < "$tmp/passwall2"
+                uci commit dhcp
+                uci commit passwall2
+                if [ "$agh_enabled" = 1 ]; then "$AGH" enable; else "$AGH" disable; fi
+                "$DNS" restart || true
+                [ "$agh_running" = 0 ] || "$AGH" start || true
+                restart_proxy || true
+                echo 'Activation failed; previous DNS configuration restored.' >&2
+            fi
+            rm -rf "$tmp"
+            rmdir "$lock"
+            exit "$rc"
+        }
+        trap cleanup EXIT
+        trap 'exit 1' HUP INT TERM
+        "$AGH" stop
+        lua /usr/share/k3/adguard-config.lua "$CONFIG" "$tmp/new.yaml"
+        "$PW" stop
+        uci set dhcp.@dnsmasq[0].port='5053'
+        uci set passwall2.@global[0].dns_redirect='0'
+        uci commit dhcp
+        uci commit passwall2
+        cp "$tmp/new.yaml" "$CONFIG"
+        "$DNS" restart
+        restart_proxy
+        "$AGH" enable
+        "$AGH" start
+        # Verify both the backend and filtered frontend. SERVFAIL or an empty answer is not success.
+        ready=0
+        for _attempt in 1 2 3 4 5; do
+            sleep 2
+            if dig +time=3 +tries=1 +short @127.0.0.1 -p 5053 openwrt.org A | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' &&
+               dig +time=3 +tries=1 +short @127.0.0.1 openwrt.org A | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+                ready=1; break
+            fi
+        done
+        [ "$ready" = 1 ] || { echo 'DNS health check failed.' >&2; exit 1; }
+        done_ok=1
+        echo 'Enabled: LAN:53 -> AdGuard Home -> dnsmasq:5053 -> PassWall2/WAN DNS.'
+        ;;
+    disable)
+        # Recovery is deliberately independent of AdGuard being healthy.
+        "$AGH" stop
+        "$AGH" disable
+        "$PW" stop
+        uci set dhcp.@dnsmasq[0].port='53'
+        uci commit dhcp
+        "$DNS" restart
+        restart_proxy
+        echo 'AdGuard disabled; dnsmasq restored to port 53.'
+        ;;
+    *) echo 'Usage: k3-adguard enable|disable|status' >&2; exit 2 ;;
+esac

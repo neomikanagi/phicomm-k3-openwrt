@@ -1,0 +1,55 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# First boot only; never invent a WAN configuration, country code or shared Wi-Fi password.
+# config_foreach invokes callbacks indirectly.
+# shellcheck disable=SC2317
+. /lib/functions.sh
+
+uci set system.@system[0].hostname='K3-OpenWrt'
+uci set firewall.@defaults[0].flow_offloading='0'
+uci set firewall.@defaults[0].flow_offloading_hw='0'
+uci commit system
+uci commit firewall
+
+# Keep DHCP/DNS working in official mode until AdGuard's authenticated wizard is complete.
+uci set adguardhome.config.work_dir='/tmp/adguardhome'
+uci set adguardhome.config.gc='50'
+uci set adguardhome.config.maxprocs='2'
+uci set adguardhome.config.memlimit='100'
+uci commit adguardhome
+/etc/init.d/adguardhome disable
+
+# No proxy without the owner's node. Avoid the stock example node being used accidentally.
+[ -s /etc/config/passwall2 ] || cp /usr/share/passwall2/0_default_config /etc/config/passwall2
+uci set passwall2.@global[0].enabled='0'
+uci set passwall2.@global[0].dns_redirect='0'
+uci set passwall2.@global[0].acl_enable='0'
+uci set passwall2.@global_forwarding[0].prefer_nft='1'
+uci commit passwall2
+
+wifi config
+radio_defaults() {
+    local section="$1" band
+    config_get band "$section" band
+    uci set "wireless.$section.disabled=1"
+    case "$band" in
+        2g) uci set "wireless.$section.htmode=HT20"; uci set "wireless.$section.channel=1" ;;
+        5g) uci set "wireless.$section.htmode=VHT80"; uci set "wireless.$section.channel=36" ;;
+    esac
+}
+iface_defaults() {
+    local section="$1" device
+    config_get device "$section" device
+    # Work around brcmfmac virtual-interface naming issues (#11466).
+    # One AP per radio; no virtual guest APs/repeater mode in this baseline.
+    case "$device" in
+        radio0) uci set "wireless.$section.ifname=wlan0" ;;
+        radio1) uci set "wireless.$section.ifname=wlan1" ;;
+    esac
+    uci set "wireless.$section.wmm=1"
+}
+config_load wireless
+config_foreach radio_defaults wifi-device
+config_foreach iface_defaults wifi-iface
+uci commit wireless
+exit 0
