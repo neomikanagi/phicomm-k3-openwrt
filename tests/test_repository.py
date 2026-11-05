@@ -59,6 +59,31 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn(".wifi_firmware.sha256", collect)
         self.assertIn("sha256sum -c -", collect)
 
+    def test_firmware_package_really_points_at_the_pinned_blob(self):
+        # An earlier substitution exited 0 without changing anything; only the final
+        # rootfs hash caught it, after a full build.
+        stock = (
+            "define Package/brcmfmac-firmware-4366c0-pcie/install\n"
+            "\t$(INSTALL_DIR) $(1)/lib/firmware/brcm\n"
+            "\t$(INSTALL_DATA) \\\n"
+            "\t\t$(PKG_BUILD_DIR)/brcm/brcmfmac4366c-pcie.bin \\\n"
+            "\t\t$(1)/lib/firmware/brcm/\n"
+            "endef\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "broadcom.mk"
+            def patch(text):
+                path.write_text(text)
+                return subprocess.run(["bash", str(ROOT / "scripts/patch-wifi-firmware.sh"), str(path)],
+                                      capture_output=True).returncode
+            self.assertEqual(patch(stock), 0)
+            patched = path.read_text()
+            self.assertIn("$(TOPDIR)/k3-vendor-firmware/brcmfmac4366c-pcie.bin \\\n", patched)
+            self.assertNotIn("$(PKG_BUILD_DIR)/brcm/brcmfmac4366c-pcie.bin", patched)
+            self.assertEqual(patched.replace("$(TOPDIR)/k3-vendor-firmware/", "$(PKG_BUILD_DIR)/brcm/"), stock)
+            self.assertNotEqual(patch("no firmware line here\n"), 0)
+            self.assertNotEqual(patch(stock + stock), 0)
+
     def test_workflow_no_secrets_no_paid_runner(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         self.assertEqual(workflow["permissions"], {"contents": "read"})

@@ -46,19 +46,12 @@ cp "$ROOT/config/k3.config" .config
 cp -a "$ROOT/files" ./files
 chmod +x files/etc/uci-defaults/99-k3 files/usr/sbin/k3-adguard files/usr/sbin/k3-check
 install -Dm644 "$ROOT/sources.lock.json" files/etc/k3-sources.json
-# Replace the contents of the selected firmware package, NOT files/ overlay:
-# this keeps the installed package manifest and the actual blob consistent.
 blob_dir="$BUILD/k3-vendor-firmware"
 mkdir -p "$blob_dir"
 curl --fail --location --retry 4 --proto '=https' --tlsv1.2 \
     "$(lock .wifi_firmware.url)" -o "$blob_dir/brcmfmac4366c-pcie.bin"
 printf '%s  %s\n' "$(lock .wifi_firmware.sha256)" "$blob_dir/brcmfmac4366c-pcie.bin" | sha256sum -c -
-# Scoped substitution: fail rather than silently patching the wrong device firmware.
-FILE=package/firmware/linux-firmware/broadcom.mk
-# Match a literal Make variable, not a shell expansion.
-# shellcheck disable=SC2016
-[[ $(grep -Fc '$(PKG_BUILD_DIR)/brcm/brcmfmac4366c-pcie.bin' "$FILE") = 1 ]]
-perl -0pi -e 's#\Q\$(PKG_BUILD_DIR)/brcm/brcmfmac4366c-pcie.bin\E#\$(TOPDIR)/k3-vendor-firmware/brcmfmac4366c-pcie.bin#g' "$FILE"
+"$ROOT/scripts/patch-wifi-firmware.sh" package/firmware/linux-firmware/broadcom.mk
 make defconfig
 "$ROOT/scripts/validate-config.sh" .config
 printf '\nPrepared %s\n' "$BUILD"

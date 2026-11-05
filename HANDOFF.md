@@ -5,12 +5,13 @@
 - **状态：** 审查并修正上一棒的工程，云编译结果见 https://github.com/neomikanagi/phicomm-k3-openwrt/actions/workflows/build.yml 。没有 K3 真机，无线、USB、代理均未上机验证。
 - **改了：** 去掉 OpenWrt 自带无线固件版，只出一个镜像；无线固件从 `ac88.48260` 换成 `ac88_3`；加入 SIM 上网棒、modem、安卓和 iPhone 共享驱动及 LuCI 协议；修 `k3-adguard` 的 DHCP DNS；删掉首次启动的无线设置；去掉 htop、USB 存储、ext4；README 和验收表重写。`config/k3.config` 现在是唯一包清单，`validate-config.sh` 和 `collect.sh` 都从它读。CI 改为 nproc 并行、失败后串行重试，新推送取消旧任务，固件保留 90 天。
 - **为什么·思路：**
+  - **AC88 替换此前从未生效：** 上一棒的 `perl -0pi 's#\Q\$(...)\E#...#'` 里 `\Q\$` 匹配字面反斜杠，退出 0 但不改文件。run 42014346526 的 ac88 编译 1.5 小时后才被 `collect.sh` 的哈希校验拦下，镜像里是 linux-firmware 原版。改为 `scripts/patch-wifi-firmware.sh`（前后置校验 + 离线测试）。**不要删 `collect.sh` 的 rootfs 哈希校验**，它是最后一道防线。
   - **开源无线没追平：** linux-firmware 的 4366c 固件从 2018-12 起没更新（10.28.2）；开源的只有 brcmfmac 这层，MAC/PHY 都在闭源固件里；K3 用户对自带固件的反馈偏差。论坛对换 AC88 固件也有一例「仍不稳定」（2020），所以不能承诺追平梅林。
   - **固件选 `ac88_3`：** 与 Lean LEDE `k3wifi` 字节相同，Lean 的 bcm53xx 默认内核已是 6.18，是目前查到的最强实测证据。`.48260` 同为 10.10.122.303（r666429），只是 2021 年的重编译版，没查到 K3 实测，留作上机对比的备选。未核实 `.48260` 是否含 FragAttacks 修复，这是 `ac88_3` 的潜在代价。
   - **DHCP：** dnsmasq 离开 53 端口后不再下发 DNS（`rfc2131.c`：`daemon->port == NAMESERVER_PORT`），旧版 `enable` 后客户端续租就断 DNS，而健康检查只查路由器本机发现不了。已在隔离 netns 用真 dnsmasq + udhcpc 复现并验证 `dhcp_option=6,0.0.0.0`（0.0.0.0 表示 dnsmasq 本机地址，LAN 改 IP 也不用动）。
   - **不要还原 `ifname=wlan0/wlan1`：** 25.12 的 `common.uc` `wdev_create` 已通过 `find_reusable_wdev` 复用并重命名 FullMAC 主接口。旧写法还有两个问题：`99-k3` 跑时 brcmfmac 可能还没注册无线设备（固件异步加载），设置被跳过却已写标记；phy/wlan 序号互换时 `ifname` 会指错网卡。无线默认值全交官方，接口默认就是 disabled。
   - **国家码：** BCM4366 不在 `brmcf_use_iso3166_ccode_fallback` 名单，K3 也没有 ccode 映射，UCI `country` 到不了固件，固件的 ccode 来自 NVRAM。没真机不敢打内核补丁改射频行为，README 已写明。
-- **已验证：** 21 项 Python 测试、ShellCheck、Lua 配置转换；AdGuard 0.107.79 在隔离 netns 同时绑定 `0.0.0.0` 和 `::` 能正常启动；`dns_redirect=0` 时 PassWall2 不生成 53 重定向（`dns_redirect_port` 为空），不会绕过 AdGuard。
+- **已验证：** 22 项 Python 测试、ShellCheck、Lua 配置转换；AdGuard 0.107.79 在隔离 netns 同时绑定 `0.0.0.0` 和 `::` 能正常启动；`dns_redirect=0` 时 PassWall2 不生成 53 重定向（`dns_redirect_port` 为空），不会绕过 AdGuard。
 - **请你：** 无。
 
 ## 2026-11-05 — pi（gpt-6.1-sol）→ 无
