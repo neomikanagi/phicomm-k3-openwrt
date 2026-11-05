@@ -67,6 +67,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotRegex(firstboot, r"wireless\..*\.key=")
         self.assertNotRegex(firstboot, r"\.country=")
         self.assertNotIn("flow_offloading='1'", firstboot)
+        self.assertIn("adguardhome.config.memlimit='104857600'", firstboot)
+        self.assertNotIn("adguardhome.config.memlimit='100'", firstboot)
 
     def test_firstboot_does_not_reset_retained_user_configuration(self):
         script = (ROOT / 'files/etc/uci-defaults/99-k3').read_text()

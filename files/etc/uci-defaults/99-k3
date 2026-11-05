@@ -19,7 +19,9 @@ uci commit firewall
 uci set adguardhome.config.work_dir='/tmp/adguardhome'
 uci set adguardhome.config.gc='50'
 uci set adguardhome.config.maxprocs='2'
-uci set adguardhome.config.memlimit='100'
+# The pinned init script passes this integer directly to GOMEMLIMIT: bytes,
+# despite its UCI comment saying MB. 100 would mean 100 bytes and cause GC thrashing.
+uci set adguardhome.config.memlimit='104857600'
 uci commit adguardhome
 /etc/init.d/adguardhome disable
 
