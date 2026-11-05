@@ -59,6 +59,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn('tee prepare.log', workflow)
         self.assertIn('K3_GO_VERSION=$(lock .build.go)', prepare)
         self.assertIn('./scripts/feeds update -i packages', prepare)
+        self.assertIn('touch feeds/packages/lang/golang/golang/Makefile', prepare)
+        self.assertIn('./scripts/feeds install -p packages "golang$K3_GO_VERSION"', prepare)
 
     def test_no_proxy_or_wifi_secrets_baked_in(self):
         firstboot = (ROOT / "files/etc/uci-defaults/99-k3").read_text()

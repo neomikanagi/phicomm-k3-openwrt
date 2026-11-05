@@ -28,7 +28,11 @@ K3_GO_VERSION=$(lock .build.go)
 GO_VALUES=feeds/packages/lang/golang/golang-values.mk
 [[ $(grep -c '^GO_DEFAULT_VERSION:=' "$GO_VALUES") = 1 ]]
 perl -pi -e 's/^GO_DEFAULT_VERSION:=.*$/GO_DEFAULT_VERSION:=$ENV{K3_GO_VERSION}/' "$GO_VALUES"
+# Feed scanning caches by Makefile mtime, not all included .mk files.
+touch feeds/packages/lang/golang/golang/Makefile
 ./scripts/feeds update -i packages
+./scripts/feeds install -p packages "golang$K3_GO_VERSION"
+[[ -L "package/feeds/packages/golang$K3_GO_VERSION" ]]
 # Install only this appliance's package closure. Installing every LuCI application
 # exposes unrelated upstream Kconfig cycles (e.g. luci-app-weechat / weechat).
 ./scripts/feeds install -p luci luci luci-ssl luci-compat luci-lib-jsonc
