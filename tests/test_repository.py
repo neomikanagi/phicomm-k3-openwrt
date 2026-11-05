@@ -17,6 +17,7 @@ class RepositoryTests(unittest.TestCase):
         for name in ("openwrt", "passwall2", "passwall_packages"):
             self.assertRegex(lock[name]["commit"], r"^[a-f0-9]{40}$")
             self.assertTrue(lock[name]["url"].startswith("https://"))
+        self.assertRegex(lock["build"]["go"], r"^1\.[0-9]+$")
         self.assertRegex(lock["ac88"]["sha256"], r"^[a-f0-9]{64}$")
         self.assertIn("bc9a70326996cc80bee5e09d5e48108c92095acf", lock["ac88"]["url"])
 
@@ -56,6 +57,8 @@ class RepositoryTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
         self.assertIn('diagnostics/build.config', workflow)
         self.assertIn('tee prepare.log', workflow)
+        self.assertIn('K3_GO_VERSION=$(lock .build.go)', prepare)
+        self.assertIn('./scripts/feeds update -i packages', prepare)
 
     def test_no_proxy_or_wifi_secrets_baked_in(self):
         firstboot = (ROOT / "files/etc/uci-defaults/99-k3").read_text()
@@ -64,6 +67,12 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotRegex(firstboot, r"wireless\..*\.key=")
         self.assertNotRegex(firstboot, r"\.country=")
         self.assertNotIn("flow_offloading='1'", firstboot)
+
+    def test_firstboot_does_not_reset_retained_user_configuration(self):
+        script = (ROOT / 'files/etc/uci-defaults/99-k3').read_text()
+        self.assertIn('k3.settings.initialized)" = 1 ] && exit 0', script)
+        self.assertIn("uci set k3.settings.initialized='1'", script)
+        self.assertLess(script.index('&& exit 0'), script.index("hostname='K3-OpenWrt'"))
 
     def test_dns_activation_guards_and_recovery(self):
         script = (ROOT / "files/usr/sbin/k3-adguard").read_text()

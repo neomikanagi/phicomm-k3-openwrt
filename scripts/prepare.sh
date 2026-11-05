@@ -19,6 +19,16 @@ for feed in passwall_packages passwall2; do
     printf 'src-git %s %s^%s\n' "$feed" "$(lock ".$feed.url")" "$(lock ".$feed.commit")" >> feeds.conf
 done
 ./scripts/feeds update -a
+# Xray 26.10.31 requires Go 1.27. Select the compiler ALREADY included in this
+# official release feed, rather than fetching a moving SDK or auto-downloading a toolchain.
+export K3_GO_VERSION
+K3_GO_VERSION=$(lock .build.go)
+[[ $K3_GO_VERSION =~ ^1\.[0-9]+$ ]]
+[[ -s "feeds/packages/lang/golang/golang$K3_GO_VERSION/Makefile" ]]
+GO_VALUES=feeds/packages/lang/golang/golang-values.mk
+[[ $(grep -c '^GO_DEFAULT_VERSION:=' "$GO_VALUES") = 1 ]]
+perl -pi -e 's/^GO_DEFAULT_VERSION:=.*$/GO_DEFAULT_VERSION:=$ENV{K3_GO_VERSION}/' "$GO_VALUES"
+./scripts/feeds update -i packages
 # Install only this appliance's package closure. Installing every LuCI application
 # exposes unrelated upstream Kconfig cycles (e.g. luci-app-weechat / weechat).
 ./scripts/feeds install -p luci luci luci-ssl luci-compat luci-lib-jsonc

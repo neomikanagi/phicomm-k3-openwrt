@@ -50,6 +50,7 @@ cp "$ROOT/docs/acceptance.md" "$OUT/acceptance.md"
     done
     sha256sum "$BLOB"
     git diff -- package/firmware/linux-firmware/broadcom.mk
+    git -C feeds/packages diff -- lang/golang/golang-values.mk
 ) > "$OUT/provenance.txt"
 printf 'BUILD VERIFIED, HARDWARE UNTESTED. Variant: %s. Not K3C.\n' "$VARIANT" > "$OUT/STATUS.txt"
 rm -f "$OUT/SHA256SUMS"

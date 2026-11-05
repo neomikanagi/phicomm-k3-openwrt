@@ -20,6 +20,7 @@ local function run(config, expect_ok)
         assert(result.http.address == '192.168.1.1:3000')
         assert(result.users[1].name == 'owner')
         assert(result.dns.bind_hosts[1] == '0.0.0.0')
+        assert(result.dns.bind_hosts[2] == '::')
         os.remove(out)
     end
     os.remove(path)

@@ -16,6 +16,9 @@ assert(type(config.dns) == 'table', 'No DNS configuration')
 assert(config.dns.port == 5353 or config.dns.port == 53,
     'Wizard DNS port must be 5353 (or an already activated 53)')
 config.dns.port = 53
+-- DHCPv6/RA can advertise the router's IPv6 DNS too. Keep the frontend dual-stack;
+-- the official firewall continues to reject unsolicited WAN DNS traffic.
+config.dns.bind_hosts = {'0.0.0.0', '::'}
 config.dns.upstream_dns = {'127.0.0.1:5053'}
 config.dns.upstream_dns_file = ''
 config.dns.fallback_dns = {}
