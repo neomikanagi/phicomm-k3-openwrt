@@ -7,18 +7,27 @@ OUT=${3:?}
 case "$VARIANT" in official|ac88) ;; *) exit 2 ;; esac
 VERSION=$(jq -r .openwrt.version "$ROOT/sources.lock.json")
 TARGET="$BUILD/bin/targets/bcm53xx/generic"
-IMAGE="$TARGET/openwrt-$VERSION-bcm53xx-generic-phicomm_k3-squashfs.trx"
+# Local source builds need not include a version in filenames. Use the generated
+# profile metadata, not the download server's naming convention.
+jq -e --arg version "$VERSION" \
+    '(.version_number == $version) and (.profiles.phicomm_k3.supported_devices | index("phicomm,k3") != null)' \
+    "$TARGET/profiles.json" >/dev/null
+IMAGE_NAME=$(jq -er '.profiles.phicomm_k3.images | map(select(.filesystem == "squashfs" and .type == "trx")) | if length == 1 then .[0].name else error("Expected one K3 squashfs TRX") end' "$TARGET/profiles.json")
+[[ $IMAGE_NAME = "$(basename "$IMAGE_NAME")" && $IMAGE_NAME = *.trx ]]
+IMAGE="$TARGET/$IMAGE_NAME"
 [[ -s $IMAGE ]]
 # TRX magic is HDR0. Conservative ceiling; actual flash layout must be checked on the router.
 [[ $(od -An -tx1 -N4 "$IMAGE" | tr -d ' \n') = 48445230 ]]
 [[ $(stat -c %s "$IMAGE") -lt 104857600 ]]
-MANIFEST="$TARGET/openwrt-$VERSION-bcm53xx-generic.manifest"
+shopt -s nullglob
+manifests=("$TARGET"/*.manifest)
+[[ ${#manifests[@]} = 1 ]]
+MANIFEST=${manifests[0]}
 [[ -s $MANIFEST ]]
 for package in luci-app-passwall2 luci-i18n-passwall2-zh-cn xray-core dnsmasq-full \
     adguardhome lyaml kmod-brcmfmac brcmfmac-firmware-4366c0-pcie kmod-nft-tproxy kmod-nft-socket; do
     grep -qE "^${package} - " "$MANIFEST" || { echo "Missing from image manifest: $package" >&2; exit 1; }
 done
-shopt -s nullglob
 roots=("$BUILD"/build_dir/target-*/root-bcm53xx)
 [[ ${#roots[@]} = 1 ]]
 rootfs=${roots[0]}
