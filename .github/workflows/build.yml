@@ -1,4 +1,4 @@
-name: Build K3 candidates
+name: Build K3 firmware
 
 on:
   workflow_dispatch:
@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: k3-build-${{ github.ref }}
-  cancel-in-progress: false
+  group: k3-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -38,13 +38,8 @@ jobs:
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      matrix:
-        wireless: [official, ac88]
     env:
       BUILD: /mnt/k3-openwrt
-      VARIANT: ${{ matrix.wireless }}
       GOMAXPROCS: '2'
       GOMEMLIMIT: 2GiB
       TZ: UTC
@@ -62,25 +57,27 @@ jobs:
           sudo chown "$USER:$USER" /mnt
           df -h /mnt
       - name: Fetch locked official source and prepare K3
-        run: bash scripts/prepare.sh "$BUILD" "$VARIANT" 2>&1 | tee prepare.log
+        run: bash scripts/prepare.sh "$BUILD" 2>&1 | tee prepare.log
       - name: Download package sources
         run: make -C "$BUILD" download -j8
-      - name: Compile official OpenWrt with selected packages
+      - name: Compile OpenWrt with selected packages
         run: |
           cd "$BUILD"
-          if ! make -j2 V=s > "$GITHUB_WORKSPACE/build.log" 2>&1; then
-            tail -n 200 "$GITHUB_WORKSPACE/build.log"
+          LOG="$GITHUB_WORKSPACE/build.log"
+          # A serial retry resumes the tree and separates parallel-build races from real errors.
+          if ! { make -j"$(nproc)" V=s > "$LOG" 2>&1 || make -j1 V=s >> "$LOG" 2>&1; }; then
+            tail -n 200 "$LOG"
             exit 1
           fi
       - name: Verify firmware and collect provenance
-        run: bash scripts/collect.sh "$BUILD" "$VARIANT" "$GITHUB_WORKSPACE/dist/$VARIANT"
-      - name: Upload verified candidate (no automatic stable release)
+        run: bash scripts/collect.sh "$BUILD" "$GITHUB_WORKSPACE/dist"
+      - name: Upload firmware
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: k3-openwrt-25.12.6-${{ matrix.wireless }}-candidate
-          path: dist/${{ matrix.wireless }}/
+          name: k3-openwrt-25.12.6
+          path: dist/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
           compression-level: 0
       - name: Save available configuration diagnostics
         if: always()
@@ -93,7 +90,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: build-log-${{ matrix.wireless }}
+          name: build-log
           path: |
             build.log
             prepare.log
@@ -103,5 +100,5 @@ jobs:
       - name: State validation boundary
         if: success()
         run: |
-          echo '### K3 candidate: ${{ matrix.wireless }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '### K3 firmware' >> "$GITHUB_STEP_SUMMARY"
           echo 'Compilation, manifest and rootfs checks passed. Hardware NOT tested. Do not flash a K3C or bypass sysupgrade compatibility checks.' >> "$GITHUB_STEP_SUMMARY"

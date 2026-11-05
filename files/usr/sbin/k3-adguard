@@ -5,15 +5,26 @@ CONFIG=/etc/adguardhome/adguardhome.yaml
 PW=/etc/init.d/passwall2
 AGH=/etc/init.d/adguardhome
 DNS=/etc/init.d/dnsmasq
+# dnsmasq stops advertising itself over DHCP once it leaves port 53, so clients would
+# lose DNS on their next renewal. 0.0.0.0 means "the address of the system running dnsmasq".
+DHCP_DNS='6,0.0.0.0'
 
 restart_proxy() {
     if [ "$(uci -q get passwall2.@global[0].enabled || true)" = 1 ]; then
         "$PW" restart
     fi
 }
+advertise_dns() {
+    # An owner-chosen DNS server takes precedence.
+    case " $(uci -q get dhcp.lan.dhcp_option || true) " in
+        *' 6,'*|*' option:dns-server,'*) ;;
+        *) uci add_list dhcp.lan.dhcp_option="$DHCP_DNS" ;;
+    esac
+}
 case "${1:-status}" in
     status)
         printf 'dnsmasq port: %s\n' "$(uci -q get dhcp.@dnsmasq[0].port || echo 53)"
+        printf 'DHCP options: %s\n' "$(uci -q get dhcp.lan.dhcp_option || echo none)"
         printf 'PassWall2 DNS redirect: %s\n' "$(uci -q get passwall2.@global[0].dns_redirect || echo 1)"
         printf 'PassWall2 ACL: %s\n' "$(uci -q get passwall2.@global[0].acl_enable || echo 0)"
         "$AGH" status || true
@@ -65,6 +76,7 @@ case "${1:-status}" in
         lua /usr/share/k3/adguard-config.lua "$CONFIG" "$tmp/new.yaml"
         "$PW" stop
         uci set dhcp.@dnsmasq[0].port='5053'
+        advertise_dns
         uci set passwall2.@global[0].dns_redirect='0'
         uci commit dhcp
         uci commit passwall2
@@ -92,6 +104,7 @@ case "${1:-status}" in
         "$AGH" disable
         "$PW" stop
         uci set dhcp.@dnsmasq[0].port='53'
+        uci -q del_list dhcp.lan.dhcp_option="$DHCP_DNS" || true
         uci commit dhcp
         "$DNS" restart
         restart_proxy

@@ -22,9 +22,17 @@ if name == 'uci':
     action = args[0]
     if action == 'get':
         if args[1] not in state: sys.exit(1)
-        print(state[args[1]])
+        value = state[args[1]]
+        print(' '.join(value) if isinstance(value, list) else value)
     elif action == 'set':
         key, val = args[1].split('=', 1); state[key] = val
+    elif action == 'add_list':
+        key, val = args[1].split('=', 1); state.setdefault(key, []).append(val)
+    elif action == 'del_list':
+        key, val = args[1].split('=', 1)
+        if val in state.get(key, []):
+            state[key].remove(val)
+            if not state[key]: del state[key]
     elif action == 'export':
         print(json.dumps({k: v for k, v in state.items() if k.startswith(args[1] + '.')}))
     elif action == 'import':
@@ -106,6 +114,23 @@ class ActivationTests(unittest.TestCase):
         result = self.run_script('disable')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.state()['dhcp.@dnsmasq[0].port'], '53')
+
+    def test_clients_keep_dns_after_dnsmasq_leaves_port_53(self):
+        # dnsmasq only advertises itself over DHCP while listening on port 53.
+        self.assertEqual(self.run_script('enable').returncode, 0)
+        self.assertEqual(self.state()['dhcp.lan.dhcp_option'], ['6,0.0.0.0'])
+        self.assertEqual(self.run_script('enable').returncode, 0)
+        self.assertEqual(self.state()['dhcp.lan.dhcp_option'], ['6,0.0.0.0'])
+        self.assertEqual(self.run_script('disable').returncode, 0)
+        self.assertNotIn('dhcp.lan.dhcp_option', self.state())
+
+    def test_owner_dns_option_is_preserved(self):
+        state = {**self.initial, 'dhcp.lan.dhcp_option': ['6,192.168.1.2']}
+        self.set_state(state)
+        self.assertEqual(self.run_script('enable').returncode, 0)
+        self.assertEqual(self.state()['dhcp.lan.dhcp_option'], ['6,192.168.1.2'])
+        self.assertEqual(self.run_script('disable').returncode, 0)
+        self.assertEqual(self.state()['dhcp.lan.dhcp_option'], ['6,192.168.1.2'])
 
     def test_dns_failure_restores_configuration(self):
         old_yaml = self.config.read_text()

@@ -3,13 +3,17 @@
 # Read-only diagnostics; no passwords, node URLs, client lists or configuration dumps.
 printf '\n== Board ==\n'
 ubus call system board
-printf '\n== Build and wireless firmware ==\n'
-cat /etc/k3-wireless-variant
+printf '\n== Wireless firmware ==\n'
 sha256sum /lib/firmware/brcm/brcmfmac4366c-pcie.bin
+dmesg | grep -E 'brcmfmac.*Firmware:' | tail -2
 printf '\n== Wireless ==\n'
 iw dev
 printf '\n== Wireless errors ==\n'
-dmesg | grep -Ei 'brcmfmac.*(error|failed|timeout|firmware|version)' | tail -20
+dmesg | grep -Ei 'brcmfmac.*(error|failed|timeout)' | tail -20
+printf '\n== USB ==\n'
+lsusb
+ls /dev/cdc-wdm* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
+ip -br link
 printf '\n== Memory and flash ==\n'
 free -m
 df -h /overlay /tmp

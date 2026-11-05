@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-BUILD=${1:?Usage: collect.sh build-dir official|ac88 output-dir}
-VARIANT=${2:?}
-OUT=${3:?}
-case "$VARIANT" in official|ac88) ;; *) exit 2 ;; esac
+BUILD=${1:?Usage: collect.sh build-dir output-dir}
+OUT=${2:?}
 VERSION=$(jq -r .openwrt.version "$ROOT/sources.lock.json")
 TARGET="$BUILD/bin/targets/bcm53xx/generic"
 # Local source builds need not include a version in filenames. Use the generated
@@ -24,26 +22,21 @@ manifests=("$TARGET"/*.manifest)
 [[ ${#manifests[@]} = 1 ]]
 MANIFEST=${manifests[0]}
 [[ -s $MANIFEST ]]
-for package in luci-app-passwall2 luci-i18n-passwall2-zh-cn xray-core dnsmasq-full \
-    adguardhome lyaml kmod-brcmfmac brcmfmac-firmware-4366c0-pcie kmod-nft-tproxy kmod-nft-socket; do
+# Symbols with an underscore are package options, not packages.
+while IFS= read -r package; do
     grep -qE "^${package} - " "$MANIFEST" || { echo "Missing from image manifest: $package" >&2; exit 1; }
-done
+done < <(sed -nE 's/^CONFIG_PACKAGE_([^_=]+)=y$/\1/p' "$ROOT/config/k3.config")
 roots=("$BUILD"/build_dir/target-*/root-bcm53xx)
 [[ ${#roots[@]} = 1 ]]
 rootfs=${roots[0]}
-for path in usr/bin/AdGuardHome usr/bin/xray usr/sbin/k3-adguard usr/sbin/k3-check \
+for path in usr/bin/AdGuardHome usr/bin/xray usr/sbin/k3-adguard usr/sbin/k3-check usr/sbin/usbmuxd \
     usr/share/k3/adguard-config.lua etc/uci-defaults/99-k3 etc/k3-sources.json; do
     [[ -s "$rootfs/$path" ]] || { echo "Missing from rootfs: $path" >&2; exit 1; }
 done
-[[ $(< "$rootfs/etc/k3-wireless-variant") = "$VARIANT" ]]
 BLOB="$rootfs/lib/firmware/brcm/brcmfmac4366c-pcie.bin"
-if [[ $VARIANT = ac88 ]]; then
-    printf '%s  %s\n' "$(jq -r .ac88.sha256 "$ROOT/sources.lock.json")" "$BLOB" | sha256sum -c -
-else
-    [[ $(sha256sum "$BLOB" | cut -d' ' -f1) != "$(jq -r .ac88.sha256 "$ROOT/sources.lock.json")" ]]
-fi
+printf '%s  %s\n' "$(jq -r .wifi_firmware.sha256 "$ROOT/sources.lock.json")" "$BLOB" | sha256sum -c -
 mkdir -p "$OUT"
-cp "$IMAGE" "$OUT/k3-openwrt-$VERSION-$VARIANT-squashfs.trx"
+cp "$IMAGE" "$OUT/k3-openwrt-$VERSION-squashfs.trx"
 cp "$MANIFEST" "$OUT/packages.manifest"
 cp "$ROOT/sources.lock.json" "$OUT/"
 cp "$BUILD/.config" "$OUT/build.config"
@@ -61,7 +54,7 @@ cp "$ROOT/docs/acceptance.md" "$OUT/acceptance.md"
     git diff -- package/firmware/linux-firmware/broadcom.mk
     git -C feeds/packages diff -- lang/golang/golang-values.mk
 ) > "$OUT/provenance.txt"
-printf 'BUILD VERIFIED, HARDWARE UNTESTED. Variant: %s. Not K3C.\n' "$VARIANT" > "$OUT/STATUS.txt"
+printf 'BUILD VERIFIED, HARDWARE UNTESTED. Not K3C.\n' > "$OUT/STATUS.txt"
 rm -f "$OUT/SHA256SUMS"
 (cd "$OUT" && sha256sum -- * > SHA256SUMS)
-echo "Validated candidate artifact: $OUT"
+echo "Validated artifact: $OUT"
