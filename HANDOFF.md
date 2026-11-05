@@ -2,7 +2,7 @@
 
 ## 2026-11-05 — claudecode → 无
 
-- **状态：** 审查并修正上一棒的工程，云编译结果见 https://github.com/neomikanagi/phicomm-k3-openwrt/actions/workflows/build.yml 。没有 K3 真机，无线、USB、代理均未上机验证。
+- **状态：** 审查并修正上一棒的工程。云编译成功：https://github.com/neomikanagi/phicomm-k3-openwrt/actions/runs/42029161396 ，`k3-openwrt-25.12.6-squashfs.trx` 38.6 MiB，SHA-256 `fbeecc49100520960cc5345df4d444a044ddb039cff6aa3f3d0d3a96408a4231`。已解开镜像核对：无线固件哈希和版本正确，USB 驱动及自动加载、usbmuxd、四种 LuCI 协议都在。没有 K3 真机，启动、无线、USB、代理均未上机验证。失败的 run 42014346526 里留有一个 `official` 包，是旧产物，不要用。
 - **改了：** 去掉 OpenWrt 自带无线固件版，只出一个镜像；无线固件从 `ac88.48260` 换成 `ac88_3`；加入 SIM 上网棒、modem、安卓和 iPhone 共享驱动及 LuCI 协议；修 `k3-adguard` 的 DHCP DNS；删掉首次启动的无线设置；去掉 htop、USB 存储、ext4；README 和验收表重写。`config/k3.config` 现在是唯一包清单，`validate-config.sh` 和 `collect.sh` 都从它读。CI 改为 nproc 并行、失败后串行重试，新推送取消旧任务，固件保留 90 天。
 - **为什么·思路：**
   - **AC88 替换此前从未生效：** 上一棒的 `perl -0pi 's#\Q\$(...)\E#...#'` 里 `\Q\$` 匹配字面反斜杠，退出 0 但不改文件。run 42014346526 的 ac88 编译 1.5 小时后才被 `collect.sh` 的哈希校验拦下，镜像里是 linux-firmware 原版。改为 `scripts/patch-wifi-firmware.sh`（前后置校验 + 离线测试）。**不要删 `collect.sh` 的 rootfs 哈希校验**，它是最后一道防线。
