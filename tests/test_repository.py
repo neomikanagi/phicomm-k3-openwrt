@@ -48,6 +48,15 @@ class RepositoryTests(unittest.TestCase):
                     self.assertRegex(step["uses"], r"@[a-f0-9]{40}$")
         self.assertNotIn("secrets.", (ROOT / ".github/workflows/build.yml").read_text())
 
+    def test_selective_feeds_and_hidden_translation_default(self):
+        prepare = (ROOT / "scripts/prepare.sh").read_text()
+        self.assertNotIn('./scripts/feeds install -a', prepare)
+        self.assertIn('./scripts/feeds install -p luci luci luci-ssl', prepare)
+        self.assertIn('CONFIG_LUCI_LANG_zh_Hans=y', (ROOT / 'config/k3.config').read_text())
+        workflow = (ROOT / '.github/workflows/build.yml').read_text()
+        self.assertIn('diagnostics/build.config', workflow)
+        self.assertIn('tee prepare.log', workflow)
+
     def test_no_proxy_or_wifi_secrets_baked_in(self):
         firstboot = (ROOT / "files/etc/uci-defaults/99-k3").read_text()
         self.assertIn("global[0].enabled='0'", firstboot)

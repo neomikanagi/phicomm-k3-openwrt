@@ -19,7 +19,10 @@ for feed in passwall_packages passwall2; do
     printf 'src-git %s %s^%s\n' "$feed" "$(lock ".$feed.url")" "$(lock ".$feed.commit")" >> feeds.conf
 done
 ./scripts/feeds update -a
-./scripts/feeds install -a
+# Install only this appliance's package closure. Installing every LuCI application
+# exposes unrelated upstream Kconfig cycles (e.g. luci-app-weechat / weechat).
+./scripts/feeds install -p luci luci luci-ssl luci-compat luci-lib-jsonc
+./scripts/feeds install -p packages adguardhome bind-dig lyaml curl htop zram-swap
 # Only override packages actually used by PassWall2; leave other official packages alone.
 ./scripts/feeds install -f -p passwall_packages chinadns-ng geoview tcping v2ray-geoip v2ray-geosite xray-core
 ./scripts/feeds install -f -p passwall2 luci-app-passwall2

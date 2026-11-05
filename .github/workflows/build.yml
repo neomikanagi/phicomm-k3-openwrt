@@ -62,7 +62,7 @@ jobs:
           sudo chown "$USER:$USER" /mnt
           df -h /mnt
       - name: Fetch locked official source and prepare K3
-        run: bash scripts/prepare.sh "$BUILD" "$VARIANT"
+        run: bash scripts/prepare.sh "$BUILD" "$VARIANT" 2>&1 | tee prepare.log
       - name: Download package sources
         run: make -C "$BUILD" download -j8
       - name: Compile official OpenWrt with selected packages
@@ -82,6 +82,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+      - name: Save available configuration diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics
+          if [ -f "$BUILD/.config" ]; then cp "$BUILD/.config" diagnostics/build.config; fi
+          if [ -f "$BUILD/tmp/.config-package.in" ]; then cp "$BUILD/tmp/.config-package.in" diagnostics/package-kconfig.txt; fi
+          if [ -d "$BUILD/logs" ]; then cp -a "$BUILD/logs" diagnostics/; fi
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -89,8 +96,8 @@ jobs:
           name: build-log-${{ matrix.wireless }}
           path: |
             build.log
-            /mnt/k3-openwrt/.config
-            /mnt/k3-openwrt/logs/
+            prepare.log
+            diagnostics/
           if-no-files-found: ignore
           retention-days: 7
       - name: State validation boundary
